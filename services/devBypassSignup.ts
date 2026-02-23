@@ -1,8 +1,10 @@
 export async function devBypassSignup(email: string, password: string): Promise<void> {
-  const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim();
-  const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim();
-  if (!supabaseUrl) throw new Error('Missing VITE_SUPABASE_URL');
-  if (!supabaseAnonKey) throw new Error('Missing VITE_SUPABASE_ANON_KEY');
+  const supabaseUrl =
+    (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim() ??
+    'https://hlfkcmgumiwmemcnnukl.supabase.co';
+  const supabaseAnonKey =
+    (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim() ??
+    'sb_publishable_xXGe5a0lz7nyJRw0KV9QxQ_qtWSh8Cu';
 
   const url = `${supabaseUrl}/functions/v1/dev-signup`;
   const devKey = (import.meta.env.VITE_DEV_BYPASS_KEY as string | undefined)?.trim();
