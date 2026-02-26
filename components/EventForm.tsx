@@ -3,6 +3,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { X, Clock, Plus, Star, Heart, MessageSquare, Sparkles, Zap, AlertCircle, Tag, BarChart3, LayoutGrid, Calendar as CalendarIcon } from 'lucide-react';
 import { EventEntry, Category, WorkItem, TagStatus, MetricValue, PoolItem } from '../types';
 
+const STORAGE_KEY = 'zentime_event_form_state';
+
 interface EventFormProps {
   onClose: () => void;
   onSubmit: (data: any) => void;
@@ -15,45 +17,45 @@ interface EventFormProps {
 const TimeInput24h: React.FC<{
   label: string;
   value: string;
-  isNextDay: boolean;
   onTimeChange: (val: string) => void;
-  onDayToggle: () => void;
   isActive: boolean;
-}> = ({ label, value, isNextDay, onTimeChange, onDayToggle, isActive }) => {
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let val = e.target.value.replace(/[^0-9:]/g, '');
-    if (val.length === 2 && !val.includes(':')) val += ':';
-    if (val.length > 5) val = val.slice(0, 5);
-    onTimeChange(val);
-  };
-
-  const handleBlur = () => {
-    let [h, m] = value.split(':');
-    h = (h || '00').padStart(2, '0');
-    m = (m || '00').padStart(2, '0');
-    if (parseInt(h) > 23) h = '23';
-    if (parseInt(m) > 59) m = '59';
-    onTimeChange(`${h}:${m}`);
-  };
-
+}> = ({ label, value, onTimeChange, isActive }) => {
+  // 检查时间是否超过24小时
+  const [hStr, mStr] = value.split(':');
+  const h = parseInt(hStr) || 0;
+  const m = parseInt(mStr) || 0;
+  const isNextDay = h >= 24;
+  // 显示时间时，将超过24小时的部分减去24，并确保格式为HH:MM
+  const displayHours = isNextDay ? h - 24 : h;
+  const displayValue = `${String(displayHours).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  
   return (
     <div className={`p-2 rounded-xl border-2 transition-all flex flex-col ${isActive ? 'border-indigo-200 bg-indigo-50/20' : 'border-gray-50 bg-gray-50/30'}`}>
       <div className="flex justify-between items-center mb-0.5">
         <label className="text-[8px] md:text-[9px] text-gray-400 uppercase font-bold">{label}</label>
         <button 
           type="button" 
-          onClick={onDayToggle}
+          onClick={() => {
+            // 切换日期（当前时间基础上加24小时或减24小时）
+            const newHours = isNextDay ? h - 24 : h + 24;
+            onTimeChange(`${String(newHours).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+          }}
           className={`text-[8px] px-1.5 py-0.5 rounded-md font-black transition-all ${isNextDay ? 'bg-indigo-400 text-white shadow-sm' : 'bg-gray-100 text-gray-300'}`}
         >
           {isNextDay ? '明日' : '当日'}
         </button>
       </div>
       <input 
-        type="text" 
-        value={value} 
-        onChange={handleInputChange}
-        onBlur={handleBlur}
-        placeholder="HH:mm"
+        type="time" 
+        value={displayValue}
+        onChange={(e) => {
+          const [inputHStr, inputMStr] = e.target.value.split(':');
+          const inputH = parseInt(inputHStr) || 0;
+          const inputM = parseInt(inputMStr) || 0;
+          // 如果当前是明日状态，保持24小时以上的格式
+          const newHours = isNextDay ? inputH + 24 : inputH;
+          onTimeChange(`${String(newHours).padStart(2, '0')}:${String(inputM).padStart(2, '0')}`);
+        }}
         className="w-full bg-transparent font-black outline-none text-xs md:text-sm text-[#4a4a4a]"
       />
     </div>
@@ -69,30 +71,103 @@ const EventForm: React.FC<EventFormProps> = ({ onClose, onSubmit, editingEvent, 
   };
   
   const [useItem, setUseItem] = useState(true);
-  const [formData, setFormData] = useState({
-    title: '',
-    itemId: '',
-    categoryId: categories[0]?.id || '',
-    description: '',
-    reflection: '',
-    highlights: [] as string[],
-    painPoints: [] as string[],
-    date: getToday(),
-    startTime: formatTime(new Date()),
-    endTime: formatTime(new Date(Date.now() + 60 * 60 * 1000)),
-    startNextDay: false,
-    endNextDay: false,
-    duration: 60,
-    tags: [] as TagStatus[],
-    metrics: [] as MetricValue[],
-    moodRating: 3,
-    completionRating: 3,
-    isHighPriority: false,
+  const [formData, setFormData] = useState(() => {
+    const savedState = localStorage.getItem(STORAGE_KEY);
+    if (savedState) {
+      try {
+        return JSON.parse(savedState);
+      } catch {
+        // 解析失败，使用默认值
+      }
+    }
+    
+    // 检查是否存在上一次记录的时间信息
+    const lastEventTime = localStorage.getItem('zentime_last_event_time');
+    let startTime, endTime, duration;
+    
+    if (lastEventTime) {
+      try {
+        const { endTime: lastEndTime } = JSON.parse(lastEventTime);
+        // 使用上一次记录的结束时间作为本次的开始时间
+        startTime = lastEndTime;
+        // 结束时间默认当前时间
+        endTime = formatTime(new Date());
+        // 计算默认持续时间
+        const startMins = parseMins(startTime);
+        const endMins = parseMins(endTime);
+        duration = endMins - startMins;
+        if (duration < 1) duration = 60; // 最小1分钟
+      } catch {
+        // 解析失败，使用默认值
+        startTime = formatTime(new Date(Date.now() - 60 * 60 * 1000)); // 当前时间-1h
+        endTime = formatTime(new Date());
+        duration = 60;
+      }
+    } else {
+      // 没有上一次记录，使用当前时间-1h作为开始时间
+      startTime = formatTime(new Date(Date.now() - 60 * 60 * 1000));
+      endTime = formatTime(new Date());
+      duration = 60;
+    }
+    
+    return {
+      title: '',
+      itemId: '',
+      categoryId: categories[0]?.id || '',
+      description: '',
+      reflection: '',
+      highlights: [] as string[],
+      painPoints: [] as string[],
+      date: getToday(),
+      startTime,
+      endTime,
+      duration,
+      tags: [] as TagStatus[],
+      metrics: [] as MetricValue[],
+      moodRating: 3,
+      completionRating: 3,
+      isHighPriority: false,
+    };
   });
 
-  const [newHighlight, setNewHighlight] = useState('');
-  const [newPainPoint, setNewPainPoint] = useState('');
-  const [sessionNewPoolItems, setSessionNewPoolItems] = useState<{highlights: string[], painPoints: string[]}>({ highlights: [], painPoints: [] });
+  const [newHighlight, setNewHighlight] = useState(() => {
+    const savedState = localStorage.getItem(STORAGE_KEY);
+    if (savedState) {
+      try {
+        const state = JSON.parse(savedState);
+        return state.newHighlight || '';
+      } catch {
+        return '';
+      }
+    }
+    return '';
+  });
+
+  const [newPainPoint, setNewPainPoint] = useState(() => {
+    const savedState = localStorage.getItem(STORAGE_KEY);
+    if (savedState) {
+      try {
+        const state = JSON.parse(savedState);
+        return state.newPainPoint || '';
+      } catch {
+        return '';
+      }
+    }
+    return '';
+  });
+
+  const [sessionNewPoolItems, setSessionNewPoolItems] = useState<{highlights: string[], painPoints: string[]}>(() => {
+    const savedState = localStorage.getItem(STORAGE_KEY);
+    if (savedState) {
+      try {
+        const state = JSON.parse(savedState);
+        return state.sessionNewPoolItems || { highlights: [], painPoints: [] };
+      } catch {
+        return { highlights: [], painPoints: [] };
+      }
+    }
+    return { highlights: [], painPoints: [] };
+  });
   const [lastModifiedFields, setLastModifiedFields] = useState<('start' | 'end' | 'duration')[]>(['start', 'duration']);
 
   useEffect(() => {
@@ -101,13 +176,21 @@ const EventForm: React.FC<EventFormProps> = ({ onClose, onSubmit, editingEvent, 
         ...editingEvent,
         itemId: editingEvent.itemId || '',
         painPoints: editingEvent.painPoints || [],
-        startNextDay: false,
-        endNextDay: (editingEvent.duration >= 1440 || (parseMins(editingEvent.endTime) < parseMins(editingEvent.startTime))),
         isHighPriority: editingEvent.isHighPriority || false
       });
       setUseItem(!!editingEvent.itemId);
     }
   }, [editingEvent]);
+
+  useEffect(() => {
+    // 保存表单状态到本地存储
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      ...formData,
+      newHighlight,
+      newPainPoint,
+      sessionNewPoolItems
+    }));
+  }, [formData, newHighlight, newPainPoint, sessionNewPoolItems]);
 
   useEffect(() => {
     if (editingEvent) return;
@@ -141,42 +224,40 @@ const EventForm: React.FC<EventFormProps> = ({ onClose, onSubmit, editingEvent, 
   }
 
   function formatMins(totalMins: number) {
-    const h = Math.floor((totalMins % 1440 + 1440) % 1440 / 60);
-    const m = (totalMins % 60 + 60) % 60;
+    const h = Math.floor(totalMins / 60);
+    const m = totalMins % 60;
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
   }
 
-  const handleTimeUpdate = (field: 'start' | 'end' | 'duration' | 'startDay' | 'endDay', val?: any) => {
+  const handleTimeUpdate = (field: 'start' | 'end' | 'duration', val?: any) => {
     let nextData = { ...formData };
     if (field === 'start') nextData.startTime = val;
     if (field === 'end') nextData.endTime = val;
     if (field === 'duration') nextData.duration = parseInt(val) || 0;
-    if (field === 'startDay') nextData.startNextDay = !nextData.startNextDay;
-    if (field === 'endDay') nextData.endNextDay = !nextData.endNextDay;
 
-    const modField = (field === 'startDay' || field === 'start') ? 'start' : (field === 'endDay' || field === 'end' ? 'end' : 'duration');
-    const newLastModified = [modField as any, ...lastModifiedFields.filter(f => f !== modField)].slice(0, 2);
+    const modField = field;
+    const newLastModified = [modField, ...lastModifiedFields.filter(f => f !== modField)].slice(0, 2);
     setLastModifiedFields(newLastModified);
 
-    const startAbs = parseMins(nextData.startTime) + (nextData.startNextDay ? 1440 : 0);
-    const endAbs = parseMins(nextData.endTime) + (nextData.endNextDay ? 1440 : 0);
+    const startAbs = parseMins(nextData.startTime);
+    const endAbs = parseMins(nextData.endTime);
     
     if (newLastModified.includes('start') && newLastModified.includes('duration')) {
       const newEndAbs = startAbs + nextData.duration;
       nextData.endTime = formatMins(newEndAbs);
-      nextData.endNextDay = newEndAbs >= 1440;
     } else if (newLastModified.includes('start') && newLastModified.includes('end')) {
       let diff = endAbs - startAbs;
       if (diff < 0) {
-        nextData.endNextDay = true;
-        diff = (parseMins(nextData.endTime) + 1440) - startAbs;
+        // 跨天情况，自动调整结束时间加24小时
+        const endMins = parseMins(nextData.endTime);
+        const newEndAbs = endMins + 1440;
+        nextData.endTime = formatMins(newEndAbs);
+        diff = newEndAbs - startAbs;
       }
       nextData.duration = diff;
     } else if (newLastModified.includes('end') && newLastModified.includes('duration')) {
       let newStartAbs = endAbs - nextData.duration;
-      if (newStartAbs < 0) newStartAbs = 0; 
       nextData.startTime = formatMins(newStartAbs);
-      nextData.startNextDay = newStartAbs >= 1440;
     }
     setFormData(nextData);
   };
@@ -292,8 +373,8 @@ const EventForm: React.FC<EventFormProps> = ({ onClose, onSubmit, editingEvent, 
           <section className="space-y-3">
             <label className="text-[10px] md:text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1.5"><Clock className="w-3.5 h-3.5 text-indigo-200"/> 时光跨度</label>
             <div className="grid grid-cols-3 gap-2">
-              <TimeInput24h label="开始" value={formData.startTime} isNextDay={formData.startNextDay} onTimeChange={(v) => handleTimeUpdate('start', v)} onDayToggle={() => handleTimeUpdate('startDay')} isActive={lastModifiedFields.includes('start')} />
-              <TimeInput24h label="结束" value={formData.endTime} isNextDay={formData.endNextDay} onTimeChange={(v) => handleTimeUpdate('end', v)} onDayToggle={() => handleTimeUpdate('endDay')} isActive={lastModifiedFields.includes('end')} />
+              <TimeInput24h label="开始" value={formData.startTime} onTimeChange={(v) => handleTimeUpdate('start', v)} isActive={lastModifiedFields.includes('start')} />
+              <TimeInput24h label="结束" value={formData.endTime} onTimeChange={(v) => handleTimeUpdate('end', v)} isActive={lastModifiedFields.includes('end')} />
               <div className={`p-2 rounded-xl border-2 transition-all ${lastModifiedFields.includes('duration') ? 'border-indigo-200 bg-indigo-50/20' : 'border-gray-50 bg-gray-50/30'}`}>
                 <label className="text-[8px] md:text-[9px] text-gray-400 block mb-0.5 uppercase font-bold">持续时长</label>
                 <div className="flex items-center gap-1">
@@ -410,14 +491,20 @@ const EventForm: React.FC<EventFormProps> = ({ onClose, onSubmit, editingEvent, 
         </form>
 
         <div className="p-5 md:p-8 bg-[#fdfaf6] flex gap-3 border-t border-gray-100">
-          <button onClick={onClose} className="flex-1 py-4 font-bold text-gray-400 hover:text-gray-600 transition-colors">取消</button>
+          <button onClick={() => {
+            localStorage.removeItem(STORAGE_KEY);
+            onClose();
+          }} className="flex-1 py-4 font-bold text-gray-400 hover:text-gray-600 transition-colors">取消</button>
           <button 
             type="button" 
-            onClick={() => onSubmit({
-              ...formData, 
-              newHighlights: sessionNewPoolItems.highlights, 
-              newPainPoints: sessionNewPoolItems.painPoints
-            })} 
+            onClick={() => {
+              onSubmit({
+                ...formData, 
+                newHighlights: sessionNewPoolItems.highlights, 
+                newPainPoints: sessionNewPoolItems.painPoints
+              });
+              localStorage.removeItem(STORAGE_KEY);
+            }} 
             disabled={!formData.title} 
             className={`flex-[2] py-4 text-[#4a6b5d] font-black rounded-2xl shadow-xl shadow-green-100/30 active:scale-95 transition-all disabled:opacity-50 ${formData.isHighPriority ? 'bg-amber-400 text-amber-900' : 'bg-[#b5ead7] hover:bg-[#a0dcc5]'}`}
           >

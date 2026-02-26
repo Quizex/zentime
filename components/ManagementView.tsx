@@ -14,6 +14,9 @@ const ManagementView: React.FC<ManagementViewProps> = ({ categories, setCategori
   const [tab, setTab] = useState<'cat' | 'item'>('item');
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState<any>(null);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [deletingType, setDeletingType] = useState<'category' | 'item' | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   
   const [tempTags, setTempTags] = useState('');
   const [tempMetrics, setTempMetrics] = useState('');
@@ -25,12 +28,31 @@ const ManagementView: React.FC<ManagementViewProps> = ({ categories, setCategori
     }
   }, [isEditing, editData?.id]);
 
-  const deleteCategory = (id: string) => {
-    if (window.confirm('确定删除分类吗？')) setCategories(prev => prev.filter(c => c.id !== id));
+  const handleDeleteClick = (type: 'category' | 'item', id: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDeletingType(type);
+    setDeletingId(id);
+    setShowConfirmDialog(true);
   };
 
-  const deleteItem = (id: string) => {
-    if (window.confirm('确定删除此事项吗？')) setWorkItems(prev => prev.filter(i => i.id !== id));
+  const handleConfirmDelete = () => {
+    if (deletingType && deletingId) {
+      if (deletingType === 'category') {
+        setCategories(prev => prev.filter(c => c.id !== deletingId));
+      } else if (deletingType === 'item') {
+        setWorkItems(prev => prev.filter(i => i.id !== deletingId));
+      }
+    }
+    setShowConfirmDialog(false);
+    setDeletingType(null);
+    setDeletingId(null);
+  };
+
+  const handleCancelDelete = () => {
+    setShowConfirmDialog(false);
+    setDeletingType(null);
+    setDeletingId(null);
   };
 
   const parseCommaString = (str: string) => {
@@ -84,7 +106,7 @@ const ManagementView: React.FC<ManagementViewProps> = ({ categories, setCategori
                 <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-inner" style={{ backgroundColor: c.color }}><Folder className="w-6 h-6" /></div>
                 <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                   <button onClick={() => { setEditData(c); setIsEditing(true); }} className="p-2 text-gray-300 hover:text-indigo-400"><Edit2 className="w-4 h-4" /></button>
-                  <button onClick={() => deleteCategory(c.id)} className="p-2 text-gray-300 hover:text-red-400"><Trash2 className="w-4 h-4" /></button>
+                  <button onClick={(e) => handleDeleteClick('category', c.id, e)} className="p-2 text-gray-300 hover:text-red-400"><Trash2 className="w-4 h-4" /></button>
                 </div>
               </div>
               <h4 className="font-bold text-gray-700 text-lg mb-1">{c.name}</h4>
@@ -104,7 +126,7 @@ const ManagementView: React.FC<ManagementViewProps> = ({ categories, setCategori
                   <span className="text-[10px] px-3 py-1 rounded-full font-black uppercase tracking-tight" style={{ backgroundColor: (cat?.color || '#eee') + '20', color: cat?.color }}>{cat?.name || '未分类'}</span>
                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button onClick={() => { setEditData(i); setIsEditing(true); }} className="p-2 text-gray-300 hover:text-indigo-400"><Edit2 className="w-4 h-4" /></button>
-                    <button onClick={() => deleteItem(i.id)} className="p-2 text-gray-300 hover:text-red-400"><Trash2 className="w-4 h-4" /></button>
+                    <button onClick={(e) => handleDeleteClick('item', i.id, e)} className="p-2 text-gray-300 hover:text-red-400"><Trash2 className="w-4 h-4" /></button>
                   </div>
                 </div>
                 <h4 className="font-bold text-gray-700 text-lg mb-4">{i.name}</h4>
@@ -137,7 +159,13 @@ const ManagementView: React.FC<ManagementViewProps> = ({ categories, setCategori
                   <label className="text-xs text-gray-400 font-black uppercase tracking-widest">主题色彩</label>
                   <div className="flex gap-4 items-center p-2 bg-gray-50 rounded-2xl">
                     <input type="color" value={editData.color} onChange={e => setEditData({ ...editData, color: e.target.value })} className="h-12 w-20 p-1 bg-white rounded-xl cursor-pointer" />
-                    <span className="text-xs font-mono text-gray-400">{editData.color}</span>
+                    <input 
+                      type="text" 
+                      value={editData.color} 
+                      onChange={e => setEditData({ ...editData, color: e.target.value })} 
+                      className="text-xs font-mono text-gray-400 bg-transparent border border-gray-200 rounded px-2 py-1 outline-none focus:border-indigo-200"
+                      placeholder="#RRGGBB"
+                    />
                   </div>
                 </div>
               ) : (
@@ -175,6 +203,32 @@ const ManagementView: React.FC<ManagementViewProps> = ({ categories, setCategori
                 <button type="submit" className="flex-1 py-4 bg-[#b5ead7] text-[#4a6b5d] font-bold rounded-2xl shadow-lg hover:shadow-xl transition-all">保存更改</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* 确认删除对话框 */}
+      {showConfirmDialog && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-[24px] p-8 max-w-sm w-full shadow-2xl">
+            <h3 className="text-xl font-bold text-gray-800 mb-4">确认删除</h3>
+            <p className="text-gray-500 mb-6">
+              确定要删除这条{deletingType === 'category' ? '分类' : '事项'}吗？此操作不可撤销。
+            </p>
+            <div className="flex gap-4">
+              <button 
+                onClick={handleCancelDelete}
+                className="flex-1 py-3 px-6 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200 transition-colors"
+              >
+                取消
+              </button>
+              <button 
+                onClick={handleConfirmDelete}
+                className="flex-1 py-3 px-6 bg-red-500 text-white font-bold rounded-xl hover:bg-red-600 transition-colors"
+              >
+                删除
+              </button>
+            </div>
           </div>
         </div>
       )}

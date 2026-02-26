@@ -15,6 +15,28 @@ interface StatsDashboardProps {
 
 const StatsDashboard: React.FC<StatsDashboardProps> = ({ events, categories, frequentStats, setFrequentStats, workItems }) => {
   const [isAddingStat, setIsAddingStat] = useState(false);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [deletingStatId, setDeletingStatId] = useState<string | null>(null);
+
+  const handleDeleteClick = (id: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDeletingStatId(id);
+    setShowConfirmDialog(true);
+  };
+
+  const handleConfirmDelete = () => {
+    if (deletingStatId) {
+      setFrequentStats(prev => prev.filter(s => s.id !== deletingStatId));
+    }
+    setShowConfirmDialog(false);
+    setDeletingStatId(null);
+  };
+
+  const handleCancelDelete = () => {
+    setShowConfirmDialog(false);
+    setDeletingStatId(null);
+  };
 
   const last7Days = useMemo(() => {
     const dates = [];
@@ -42,11 +64,23 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ events, categories, fre
         if (stat.dimension === 'time') {
           if (dayEvents.length > 0) {
             if (stat.field === 'startTime') {
-              const sorted = dayEvents.sort((a,b) => a.startTime.localeCompare(b.startTime));
-              value = parseInt(sorted[0].startTime.replace(':', ''));
+              // 时间已经是24小时格式，直接比较
+              const sorted = dayEvents.sort((a,b) => {
+                const timeA = parseInt(a.startTime.replace(':', ''));
+                const timeB = parseInt(b.startTime.replace(':', ''));
+                return timeA - timeB;
+              });
+              const earliestEvent = sorted[0];
+              value = parseInt(earliestEvent.startTime.replace(':', ''));
             } else if (stat.field === 'endTime') {
-              const sorted = dayEvents.sort((a,b) => b.endTime.localeCompare(a.endTime));
-              value = parseInt(sorted[0].endTime.replace(':', ''));
+              // 时间已经是24小时格式，直接比较
+              const sorted = dayEvents.sort((a,b) => {
+                const timeA = parseInt(a.endTime.replace(':', ''));
+                const timeB = parseInt(b.endTime.replace(':', ''));
+                return timeB - timeA;
+              });
+              const latestEvent = sorted[0];
+              value = parseInt(latestEvent.endTime.replace(':', ''));
             } else if (stat.field === 'duration') {
               value = dayEvents.reduce((acc, curr) => acc + curr.duration, 0);
             }
@@ -64,9 +98,15 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ events, categories, fre
         }
 
         // 判定是否达标
-        const targetValNum = typeof stat.targetValue === 'string' && stat.targetValue.includes(':') 
+        let targetValNum = typeof stat.targetValue === 'string' && stat.targetValue.includes(':') 
           ? parseInt(stat.targetValue.replace(':', '')) 
           : Number(stat.targetValue);
+
+        // 处理目标时间可能在第二天的情况
+        // 如果目标时间小于 12:00，可能是第二天的时间，加上 2400
+        if (typeof stat.targetValue === 'string' && stat.targetValue.includes(':') && targetValNum < 1200) {
+          targetValNum += 2400;
+        }
 
         if (stat.operator === 'gte') isMet = value >= targetValNum;
         else if (stat.operator === 'lte') isMet = value <= targetValNum;
@@ -125,7 +165,7 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ events, categories, fre
                       目标: {insight.operator === 'gte' ? '≥' : insight.operator === 'lte' ? '≤' : '='} {insight.targetValue}
                     </span>
                   </div>
-                  <button onClick={() => setFrequentStats(prev => prev.filter(s => s.id !== insight.id))} className="p-2 text-gray-200 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100">
+                  <button onClick={(e) => handleDeleteClick(insight.id, e)} className="p-2 text-gray-200 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100">
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
@@ -204,6 +244,32 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ events, categories, fre
           categories={categories}
           workItems={workItems}
         />
+      )}
+
+      {/* 确认删除对话框 */}
+      {showConfirmDialog && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-[24px] p-8 max-w-sm w-full shadow-2xl">
+            <h3 className="text-xl font-bold text-gray-800 mb-4">确认删除</h3>
+            <p className="text-gray-500 mb-6">
+              确定要删除这条常统计吗？此操作不可撤销。
+            </p>
+            <div className="flex gap-4">
+              <button 
+                onClick={handleCancelDelete}
+                className="flex-1 py-3 px-6 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200 transition-colors"
+              >
+                取消
+              </button>
+              <button 
+                onClick={handleConfirmDelete}
+                className="flex-1 py-3 px-6 bg-red-500 text-white font-bold rounded-xl hover:bg-red-600 transition-colors"
+              >
+                删除
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -293,6 +293,11 @@ const App: React.FC = () => {
     if (editingEvent) setEvents(prev => prev.map(e => e.id === editingEvent.id ? newEvent : e));
     else setEvents(prev => [newEvent, ...prev]);
 
+    // 保存上一次记录的时间信息到本地存储
+    localStorage.setItem('zentime_last_event_time', JSON.stringify({
+      endTime: data.endTime
+    }));
+
     setIsFormOpen(false);
     setEditingEvent(null);
   };

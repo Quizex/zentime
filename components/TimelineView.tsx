@@ -3,6 +3,18 @@ import React, { useState } from 'react';
 import { Edit2, Trash2, Clock, Star, AlertCircle, Quote, Tag, BarChart3, Plus, X, EyeOff, LayoutList, Sparkles } from 'lucide-react';
 import { EventEntry, Category } from '../types';
 
+// 格式化时间，将超过24小时的时间转换为"明x-24:xx"格式
+const formatTimeDisplay = (timeStr: string): string => {
+  const [hStr, mStr] = timeStr.split(':');
+  const hours = parseInt(hStr) || 0;
+  const minutes = parseInt(mStr) || 0;
+  if (hours >= 24) {
+    const nextDayHours = hours - 24;
+    return `明${String(nextDayHours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+  }
+  return timeStr;
+};
+
 interface TimelineViewProps {
   events: EventEntry[];
   onEdit: (event: EventEntry) => void;
@@ -12,6 +24,28 @@ interface TimelineViewProps {
 
 const TimelineView: React.FC<TimelineViewProps> = ({ events, onEdit, onDelete, categories }) => {
   const [viewMode, setViewMode] = useState<'priority' | 'all'>('priority');
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [deletingEventId, setDeletingEventId] = useState<string | null>(null);
+
+  const handleDeleteClick = (id: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDeletingEventId(id);
+    setShowConfirmDialog(true);
+  };
+
+  const handleConfirmDelete = () => {
+    if (deletingEventId) {
+      onDelete(deletingEventId);
+    }
+    setShowConfirmDialog(false);
+    setDeletingEventId(null);
+  };
+
+  const handleCancelDelete = () => {
+    setShowConfirmDialog(false);
+    setDeletingEventId(null);
+  };
 
   const priorityEvents = events.filter(e => e.isHighPriority);
   const displayEvents = viewMode === 'priority' ? priorityEvents : events;
@@ -105,14 +139,14 @@ const TimelineView: React.FC<TimelineViewProps> = ({ events, onEdit, onDelete, c
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                         <span className="text-[9px] md:text-xs font-bold px-2 py-0.5 rounded-lg shrink-0" style={{ backgroundColor: (category?.color || '#eee') + '20', color: category?.color }}>{category?.name || '未分类'}</span>
                         <div className="flex items-center gap-1.5 text-gray-400 text-[10px] md:text-sm font-semibold tracking-tight">
-                          <span className="text-[#4a4a4a]">{event.startTime} - {event.endTime}</span>
+                          <span className="text-[#4a4a4a]">{formatTimeDisplay(event.startTime)} - {formatTimeDisplay(event.endTime)}</span>
                           <span className="text-gray-200">|</span>
                           <span>{event.duration}m</span>
                         </div>
                       </div>
                       <div className="flex gap-0.5 md:opacity-0 group-hover:opacity-100 transition-opacity">
                         <button onClick={() => onEdit(event)} className="p-1 text-gray-300 hover:text-indigo-400 hover:bg-indigo-50 rounded-full transition-all"><Edit2 className="w-3.5 h-3.5 md:w-4 md:h-4" /></button>
-                        <button onClick={() => onDelete(event.id)} className="p-1 text-gray-300 hover:text-red-400 hover:bg-red-50 rounded-full transition-all"><Trash2 className="w-3.5 h-3.5 md:w-4 md:h-4" /></button>
+                        <button onClick={(e) => handleDeleteClick(event.id, e)} className="p-1 text-gray-300 hover:text-red-400 hover:bg-red-50 rounded-full transition-all"><Trash2 className="w-3.5 h-3.5 md:w-4 md:h-4" /></button>
                       </div>
                     </div>
 
@@ -186,6 +220,30 @@ const TimelineView: React.FC<TimelineViewProps> = ({ events, onEdit, onDelete, c
           </div>
         </div>
       ))}
+
+      {/* 确认删除对话框 */}
+      {showConfirmDialog && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-[24px] p-8 max-w-sm w-full shadow-2xl">
+            <h3 className="text-xl font-bold text-gray-800 mb-4">确认删除</h3>
+            <p className="text-gray-500 mb-6">确定要删除这条记录吗？此操作不可撤销。</p>
+            <div className="flex gap-4">
+              <button 
+                onClick={handleCancelDelete}
+                className="flex-1 py-3 px-6 bg-gray-100 text-gray-700 font-bold rounded-xl hover:bg-gray-200 transition-colors"
+              >
+                取消
+              </button>
+              <button 
+                onClick={handleConfirmDelete}
+                className="flex-1 py-3 px-6 bg-red-500 text-white font-bold rounded-xl hover:bg-red-600 transition-colors"
+              >
+                删除
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

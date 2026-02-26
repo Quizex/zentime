@@ -4,6 +4,18 @@ import { Clock, Star, Quote, PieChart as PieIcon, List as ListIcon, Zap, AlertCi
 import { EventEntry, Category } from '../types';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 
+// 格式化时间，将超过24小时的时间转换为"明x-24:xx"格式
+const formatTimeDisplay = (timeStr: string): string => {
+  const [hStr, mStr] = timeStr.split(':');
+  const hours = parseInt(hStr) || 0;
+  const minutes = parseInt(mStr) || 0;
+  if (hours >= 24) {
+    const nextDayHours = hours - 24;
+    return `明${String(nextDayHours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+  }
+  return timeStr;
+};
+
 interface DayDetailViewProps {
   date: string;
   events: EventEntry[];
@@ -21,9 +33,8 @@ const DayDetailView: React.FC<DayDetailViewProps> = ({ date, events, categories,
     const intervals = dayEvents.map(e => {
       const [sh, sm] = e.startTime.split(':').map(Number);
       const [eh, em] = e.endTime.split(':').map(Number);
-      let start = sh * 60 + sm;
-      let end = eh * 60 + em;
-      if (end < start) end += 1440; // 跨天处理
+      const start = sh * 60 + sm;
+      const end = eh * 60 + em;
       return { start, end };
     }).sort((a, b) => a.start - b.start);
 
@@ -123,9 +134,9 @@ const DayDetailView: React.FC<DayDetailViewProps> = ({ date, events, categories,
             return (
               <div key={event.id} onClick={() => onEditEvent(event)} className="bg-white p-6 rounded-[32px] border border-gray-50 shadow-sm hover:shadow-md transition-all cursor-pointer group flex items-start gap-6">
                  <div className="flex flex-col items-center shrink-0 w-16">
-                    <span className="text-sm font-black text-gray-400">{event.startTime}</span>
+                    <span className="text-sm font-black text-gray-400">{formatTimeDisplay(event.startTime)}</span>
                     <div className="w-px h-8 bg-gray-100 my-1"></div>
-                    <span className="text-[10px] font-bold text-gray-300">{event.endTime}</span>
+                    <span className="text-[10px] font-bold text-gray-300">{formatTimeDisplay(event.endTime)}</span>
                  </div>
                  <div className="flex-1 space-y-3">
                     <div className="flex items-center justify-between">
