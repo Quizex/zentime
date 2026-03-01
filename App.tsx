@@ -120,12 +120,9 @@ const App: React.FC = () => {
               }
             : null;
 
-        const userData = await loadUserData(sessionUserId);
-        const hasAnyUserRows =
-          userData.events.length > 0 ||
-          userData.categories.length > 0 ||
-          userData.workItems.length > 0 ||
-          userData.frequentStats.length > 0;
+        // 先检查用户是否有数据
+        const userDataCounts = await getUserDataCounts(sessionUserId);
+        const hasAnyUserRows = userDataCounts.events > 0 || userDataCounts.categories > 0 || userDataCounts.workItems > 0 || userDataCounts.frequentStats > 0;
 
         if (!hasAnyUserRows && legacyState) {
           await replaceUserData(sessionUserId, legacyState);
@@ -147,14 +144,40 @@ const App: React.FC = () => {
           }
         }
 
+        // 尝试从本地缓存加载数据，提高初次加载速度
+        const cachedData = localStorage.getItem(`zt_user_data_${sessionUserId}`);
+        if (cachedData) {
+          try {
+            const parsedData = JSON.parse(cachedData);
+            setEvents(parsedData.events || []);
+            setCategories(parsedData.categories || DEFAULT_CATEGORIES);
+            setWorkItems(parsedData.workItems || DEFAULT_WORK_ITEMS);
+            setFrequentStats(parsedData.frequentStats || []);
+            setIsHydrated(true);
+            setServerCounts(userDataCounts);
+          } catch (e) {
+            console.error('Error parsing cached data:', e);
+          }
+        }
+
+        // 从服务器加载最新数据
         const state = await loadUserData(sessionUserId);
         if (cancelled) return;
+        
+        // 更新状态
         setEvents(state.events);
         setCategories(state.categories);
         setWorkItems(state.workItems);
         setFrequentStats(state.frequentStats);
         setIsHydrated(true);
-        getUserDataCounts(sessionUserId).then(setServerCounts).catch(() => {});
+        setServerCounts(userDataCounts);
+        
+        // 更新本地缓存
+        try {
+          localStorage.setItem(`zt_user_data_${sessionUserId}`, JSON.stringify(state));
+        } catch (e) {
+          console.error('Error caching data:', e);
+        }
       } catch (e) {
         if (cancelled) return;
         console.error(e);
@@ -184,6 +207,13 @@ const App: React.FC = () => {
           setSyncStatus('saved');
           setLastSyncedAt(Date.now());
           getUserDataCounts(sessionUserId).then(setServerCounts).catch(() => {});
+          
+          // 更新本地缓存
+          try {
+            localStorage.setItem(`zt_user_data_${sessionUserId}`, JSON.stringify({ events, categories, workItems, frequentStats }));
+          } catch (e) {
+            console.error('Error caching data:', e);
+          }
         } catch (e) {
           console.error(e);
           setSyncStatus('error');
