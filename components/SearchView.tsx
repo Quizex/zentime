@@ -24,6 +24,8 @@ const SearchView: React.FC<SearchViewProps> = ({ events, categories, workItems }
   });
   const [metricFilter, setMetricFilter] = useState({
     name: '',
+    operator: 'range', // range, gt, lt, eq
+    value: '',
     min: '',
     max: ''
   });
@@ -174,8 +176,17 @@ const SearchView: React.FC<SearchViewProps> = ({ events, categories, workItems }
       if (metricFilter.name) {
         const metric = event.metrics.find(m => m.name === metricFilter.name);
         if (!metric) return false;
-        if (metricFilter.min && metric.value < parseFloat(metricFilter.min)) return false;
-        if (metricFilter.max && metric.value > parseFloat(metricFilter.max)) return false;
+        
+        if (metricFilter.operator === 'range') {
+          if (metricFilter.min && metric.value < parseFloat(metricFilter.min)) return false;
+          if (metricFilter.max && metric.value > parseFloat(metricFilter.max)) return false;
+        } else if (metricFilter.operator === 'gt' && metricFilter.value) {
+          if (metric.value <= parseFloat(metricFilter.value)) return false;
+        } else if (metricFilter.operator === 'lt' && metricFilter.value) {
+          if (metric.value >= parseFloat(metricFilter.value)) return false;
+        } else if (metricFilter.operator === 'eq' && metricFilter.value) {
+          if (metric.value !== parseFloat(metricFilter.value)) return false;
+        }
       }
 
       // 文本搜索
@@ -201,7 +212,7 @@ const SearchView: React.FC<SearchViewProps> = ({ events, categories, workItems }
     setTagStatus('');
     setTagType('');
     setSelectOption({ name: '', value: '' });
-    setMetricFilter({ name: '', min: '', max: '' });
+    setMetricFilter({ name: '', operator: 'range', value: '', min: '', max: '' });
     setTextSearch({ title: '', description: '', reflection: '' });
   };
 
@@ -211,7 +222,7 @@ const SearchView: React.FC<SearchViewProps> = ({ events, categories, workItems }
       setItemId('');
       setTagType('');
       setSelectOption({ name: '', value: '' });
-      setMetricFilter({ name: '', min: '', max: '' });
+      setMetricFilter({ name: '', operator: 'range', value: '', min: '', max: '' });
     }
   }, [categoryId]);
 
@@ -220,7 +231,7 @@ const SearchView: React.FC<SearchViewProps> = ({ events, categories, workItems }
     if (itemId) {
       setTagType('');
       setSelectOption({ name: '', value: '' });
-      setMetricFilter({ name: '', min: '', max: '' });
+      setMetricFilter({ name: '', operator: 'range', value: '', min: '', max: '' });
     }
   }, [itemId]);
 
@@ -399,7 +410,7 @@ const SearchView: React.FC<SearchViewProps> = ({ events, categories, workItems }
               </label>
               <select 
                 value={metricFilter.name} 
-                onChange={e => setMetricFilter({ ...metricFilter, name: e.target.value })} 
+                onChange={e => setMetricFilter({ name: e.target.value, operator: 'range', value: '', min: '', max: '' })} 
                 className="w-full bg-gray-50 border-2 border-transparent focus:border-indigo-100 px-3 py-2 rounded-xl text-xs font-black outline-none"
               >
                 <option value="">-- 选择指标 --</option>
@@ -407,22 +418,43 @@ const SearchView: React.FC<SearchViewProps> = ({ events, categories, workItems }
                   <option key={metric} value={metric}>{metric}</option>
                 ))}
               </select>
-              <div className="flex gap-2">
+              <select 
+                value={metricFilter.operator} 
+                onChange={e => setMetricFilter({ ...metricFilter, operator: e.target.value, value: '', min: '', max: '' })} 
+                disabled={!metricFilter.name}
+                className="w-full bg-gray-50 border-2 border-transparent focus:border-indigo-100 px-3 py-2 rounded-xl text-xs font-black outline-none"
+              >
+                <option value="range">范围</option>
+                <option value="gt">大于</option>
+                <option value="lt">小于</option>
+                <option value="eq">等于</option>
+              </select>
+              {metricFilter.operator === 'range' ? (
+                <div className="flex gap-2">
+                  <input 
+                    type="number" 
+                    placeholder="最小值" 
+                    value={metricFilter.min} 
+                    onChange={e => setMetricFilter({ ...metricFilter, min: e.target.value })} 
+                    className="flex-1 bg-gray-50 border-2 border-transparent focus:border-indigo-100 px-3 py-2 rounded-xl text-xs font-black outline-none"
+                  />
+                  <input 
+                    type="number" 
+                    placeholder="最大值" 
+                    value={metricFilter.max} 
+                    onChange={e => setMetricFilter({ ...metricFilter, max: e.target.value })} 
+                    className="flex-1 bg-gray-50 border-2 border-transparent focus:border-indigo-100 px-3 py-2 rounded-xl text-xs font-black outline-none"
+                  />
+                </div>
+              ) : (
                 <input 
                   type="number" 
-                  placeholder="最小值" 
-                  value={metricFilter.min} 
-                  onChange={e => setMetricFilter({ ...metricFilter, min: e.target.value })} 
-                  className="flex-1 bg-gray-50 border-2 border-transparent focus:border-indigo-100 px-3 py-2 rounded-xl text-xs font-black outline-none"
+                  placeholder={metricFilter.operator === 'gt' ? '大于' : metricFilter.operator === 'lt' ? '小于' : '等于'} 
+                  value={metricFilter.value} 
+                  onChange={e => setMetricFilter({ ...metricFilter, value: e.target.value })} 
+                  className="w-full bg-gray-50 border-2 border-transparent focus:border-indigo-100 px-3 py-2 rounded-xl text-xs font-black outline-none"
                 />
-                <input 
-                  type="number" 
-                  placeholder="最大值" 
-                  value={metricFilter.max} 
-                  onChange={e => setMetricFilter({ ...metricFilter, max: e.target.value })} 
-                  className="flex-1 bg-gray-50 border-2 border-transparent focus:border-indigo-100 px-3 py-2 rounded-xl text-xs font-black outline-none"
-                />
-              </div>
+              )}
             </div>
 
             {/* 文本搜索 */}

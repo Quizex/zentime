@@ -371,7 +371,7 @@ const App: React.FC = () => {
           {activeView === 'timeline' && (
             <div className="max-w-4xl mx-auto space-y-6">
               <NaturalLanguageInput onParsed={handleAddEvent} />
-              <TimelineView events={filteredEvents} onEdit={(e) => {setEditingEvent(e); setIsFormOpen(true);}} onDelete={(id) => setEvents(events.filter(e => e.id !== id))} categories={categories} />
+              <TimelineView events={filteredEvents} onEdit={(e) => {setEditingEvent(e); setIsFormOpen(true);}} onDelete={(id) => setEvents(prevEvents => prevEvents.filter(e => e.id !== id))} categories={categories} />
             </div>
           )}
           {activeView === 'calendar' && (

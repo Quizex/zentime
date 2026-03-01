@@ -83,7 +83,7 @@ const ManagementView: React.FC<ManagementViewProps> = ({ categories, setCategori
       ...editData,
       defaultTags: parseCommaString(tempTags),
       defaultMetrics: parseCommaString(tempMetrics),
-      selectOptions: parseSelectOptions(tempSelectOptions)
+      selectOptions: tempSelectOptions.trim() ? parseSelectOptions(tempSelectOptions) : editData.selectOptions || []
     };
 
     if (tab === 'cat') {
