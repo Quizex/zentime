@@ -51,7 +51,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ events, onDateSelect, categ
         </div>
 
         {/* 重点事件简要列表 */}
-        <div className="flex-1 overflow-hidden space-y-0.5">
+        <div className="flex-1 overflow-y-auto space-y-0.5 pr-1">
           {priorityDayEvents.map(e => (
             <div key={e.id} className="flex items-center gap-1 text-[8px] md:text-[9px] truncate">
               <div className="w-1 h-1 bg-amber-400 rounded-full shrink-0"></div>
