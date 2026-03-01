@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { X, Clock, Plus, Star, Heart, MessageSquare, Sparkles, Zap, AlertCircle, Tag, BarChart3, LayoutGrid, Calendar as CalendarIcon } from 'lucide-react';
-import { EventEntry, Category, WorkItem, TagStatus, MetricValue, PoolItem } from '../types';
+import { X, Clock, Plus, Star, Heart, MessageSquare, Sparkles, Zap, AlertCircle, Tag, BarChart3, LayoutGrid, Calendar as CalendarIcon, ChevronDown, ChevronUp } from 'lucide-react';
+import { EventEntry, Category, WorkItem, TagStatus, MetricValue, PoolItem, SelectOption } from '../types';
 
 const STORAGE_KEY = 'zentime_event_form_state';
 
@@ -64,18 +64,54 @@ const TimeInput24h: React.FC<{
 
 const EventForm: React.FC<EventFormProps> = ({ onClose, onSubmit, editingEvent, categories, workItems, onJumpToManage }) => {
   const getToday = () => new Date().toISOString().split('T')[0];
+  const getYesterday = () => {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    return yesterday.toISOString().split('T')[0];
+  };
   const formatTime = (d: Date) => {
     const h = String(d.getHours()).padStart(2, '0');
     const m = String(d.getMinutes()).padStart(2, '0');
     return `${h}:${m}`;
   };
   
-  const [useItem, setUseItem] = useState(true);
+  const [useItem, setUseItem] = useState(() => {
+    const savedState = localStorage.getItem(STORAGE_KEY);
+    if (savedState) {
+      try {
+        const state = JSON.parse(savedState);
+        return state.useItem !== undefined ? state.useItem : true;
+      } catch {
+        return true;
+      }
+    }
+    return true;
+  });
   const [formData, setFormData] = useState(() => {
     const savedState = localStorage.getItem(STORAGE_KEY);
     if (savedState) {
       try {
-        return JSON.parse(savedState);
+        const state = JSON.parse(savedState);
+        // 只提取 formData 相关字段
+        return {
+          title: state.title || '',
+          itemId: state.itemId || '',
+          categoryId: state.categoryId || categories[0]?.id || '',
+          description: state.description || '',
+          reflection: state.reflection || '',
+          highlights: state.highlights || [] as string[],
+          painPoints: state.painPoints || [] as string[],
+          date: state.date || getToday(),
+          startTime: state.startTime || formatTime(new Date(Date.now() - 60 * 60 * 1000)),
+          endTime: state.endTime || formatTime(new Date()),
+          duration: state.duration || 60,
+          tags: state.tags || [] as TagStatus[],
+          metrics: state.metrics || [] as MetricValue[],
+          selectOptions: state.selectOptions || [] as { name: string; value: string }[],
+          moodRating: state.moodRating || 3,
+          completionRating: state.completionRating || 3,
+          isHighPriority: state.isHighPriority || false,
+        };
       } catch {
         // 解析失败，使用默认值
       }
@@ -124,6 +160,7 @@ const EventForm: React.FC<EventFormProps> = ({ onClose, onSubmit, editingEvent, 
       duration,
       tags: [] as TagStatus[],
       metrics: [] as MetricValue[],
+      selectOptions: [] as { name: string; value: string }[],
       moodRating: 3,
       completionRating: 3,
       isHighPriority: false,
@@ -168,14 +205,62 @@ const EventForm: React.FC<EventFormProps> = ({ onClose, onSubmit, editingEvent, 
     }
     return { highlights: [], painPoints: [] };
   });
-  const [lastModifiedFields, setLastModifiedFields] = useState<('start' | 'end' | 'duration')[]>(['start', 'duration']);
+  const [lastModifiedFields, setLastModifiedFields] = useState<('start' | 'end' | 'duration')[]>(() => {
+    const savedState = localStorage.getItem(STORAGE_KEY);
+    if (savedState) {
+      try {
+        const state = JSON.parse(savedState);
+        return state.lastModifiedFields || ['start', 'duration'];
+      } catch {
+        return ['start', 'duration'];
+      }
+    }
+    return ['start', 'duration'];
+  });
+  const [expandedSelectOptions, setExpandedSelectOptions] = useState<Record<string, boolean>>(() => {
+    const savedState = localStorage.getItem(STORAGE_KEY);
+    if (savedState) {
+      try {
+        const state = JSON.parse(savedState);
+        return state.expandedSelectOptions || {};
+      } catch {
+        return {};
+      }
+    }
+    return {};
+  });
+
+  // 当选择框数据变化时，默认展开所有选择框
+  useEffect(() => {
+    if (formData.selectOptions && formData.selectOptions.length > 0) {
+      const newExpandedState: Record<string, boolean> = {};
+      formData.selectOptions.forEach(opt => {
+        newExpandedState[opt.name] = true;
+      });
+      setExpandedSelectOptions(newExpandedState);
+    }
+  }, [formData.selectOptions]);
 
   useEffect(() => {
     if (editingEvent) {
+      // 转换旧的标签格式（字符串状态值）为新的格式（数字状态值）
+      const convertedTags = (editingEvent.tags || []).map((tag: any) => {
+        if (typeof tag.status === 'string') {
+          switch (tag.status) {
+            case 'positive': return { ...tag, status: 1 };
+            case 'negative': return { ...tag, status: -1 };
+            default: return { ...tag, status: 0 };
+          }
+        }
+        return tag;
+      });
+      
       setFormData({
         ...editingEvent,
         itemId: editingEvent.itemId || '',
         painPoints: editingEvent.painPoints || [],
+        tags: convertedTags,
+        selectOptions: editingEvent.selectOptions || [],
         isHighPriority: editingEvent.isHighPriority || false
       });
       setUseItem(!!editingEvent.itemId);
@@ -188,12 +273,14 @@ const EventForm: React.FC<EventFormProps> = ({ onClose, onSubmit, editingEvent, 
       ...formData,
       newHighlight,
       newPainPoint,
-      sessionNewPoolItems
+      sessionNewPoolItems,
+      useItem,
+      lastModifiedFields,
+      expandedSelectOptions
     }));
-  }, [formData, newHighlight, newPainPoint, sessionNewPoolItems]);
+  }, [formData, newHighlight, newPainPoint, sessionNewPoolItems, useItem, lastModifiedFields, expandedSelectOptions]);
 
   useEffect(() => {
-    if (editingEvent) return;
     const item = workItems.find(i => i.id === formData.itemId);
     const category = categories.find(c => c.id === formData.categoryId);
     
@@ -209,13 +296,115 @@ const EventForm: React.FC<EventFormProps> = ({ onClose, onSubmit, editingEvent, 
       defaultMetrics = category.defaultMetrics || [];
     }
 
-    setFormData(prev => ({
-      ...prev,
-      tags: defaultTags.map(t => ({ name: t, status: 'neutral' })),
-      metrics: defaultMetrics.map(m => ({ name: m, value: 3 })),
-      highlights: [],
-      painPoints: []
-    }));
+    // 如果是编辑事件，需要合并默认标签和现有标签，确保所有默认标签都显示，同时保留用户自己勾选过但在库中已删除的标签
+    if (editingEvent) {
+      // 获取默认标签的名称集合
+      const defaultTagNames = new Set(defaultTags);
+      // 为每个默认标签创建标签对象，如果已存在则使用现有状态，否则使用默认状态 0
+      const defaultTagsWithStatus = defaultTags.map(t => {
+        const existingTag = (editingEvent.tags || []).find((tag: any) => tag.name === t);
+        if (existingTag) {
+          // 转换旧的标签格式（字符串状态值）为新的格式（数字状态值）
+          if (typeof existingTag.status === 'string') {
+            switch (existingTag.status) {
+              case 'positive': return { ...existingTag, status: 1 };
+              case 'negative': return { ...existingTag, status: -1 };
+              default: return { ...existingTag, status: 0 };
+            }
+          }
+          return existingTag;
+        }
+        return { name: t, status: 0 };
+      });
+      
+      // 找出用户自己勾选过但在库中已删除的标签
+      const userTagsNotInDefault = (editingEvent.tags || []).filter((tag: any) => {
+        // 转换旧的标签格式（字符串状态值）为新的格式（数字状态值）
+        if (typeof tag.status === 'string') {
+          switch (tag.status) {
+            case 'positive': 
+              tag.status = 1;
+              break;
+            case 'negative': 
+              tag.status = -1;
+              break;
+            default: 
+              tag.status = 0;
+              break;
+          }
+        }
+        // 只保留状态不为 0 的标签（已勾选的标签）
+        return !defaultTagNames.has(tag.name) && tag.status !== 0;
+      });
+      
+      // 合并默认标签和用户自己勾选的标签
+      const mergedTags = [...defaultTagsWithStatus, ...userTagsNotInDefault];
+      
+      // 处理指标
+      const defaultMetricNames = new Set(defaultMetrics);
+      const defaultMetricsWithValue = defaultMetrics.map(m => {
+        const existingMetric = (editingEvent.metrics || []).find((metric: any) => metric.name === m);
+        return existingMetric || { name: m, value: 3 };
+      });
+      
+      // 找出用户自己添加但在库中已删除的指标
+      const userMetricsNotInDefault = (editingEvent.metrics || []).filter((metric: any) => {
+        return !defaultMetricNames.has(metric.name);
+      });
+      
+      // 合并默认指标和用户自己添加的指标
+      const mergedMetrics = [...defaultMetricsWithValue, ...userMetricsNotInDefault];
+      
+      // 处理选择框
+      const allSelectOptions = [...(item?.selectOptions || []), ...(category?.selectOptions || [])];
+      const existingSelectOptions = (editingEvent.selectOptions || []);
+      const mergedSelectOptions = allSelectOptions.map(opt => {
+        const existing = existingSelectOptions.find(s => s.name === opt.name);
+        return {
+          name: opt.name,
+          value: existing?.value || ''
+        };
+      });
+      
+      setFormData(prev => ({
+        ...prev,
+        tags: mergedTags,
+        metrics: mergedMetrics,
+        selectOptions: mergedSelectOptions
+      }));
+    } else {
+      // 非编辑模式，更新标签、指标和选择框
+      const allSelectOptions = [...(item?.selectOptions || []), ...(category?.selectOptions || [])];
+      setFormData(prev => {
+        // 为每个默认标签创建标签对象，如果已存在则使用现有状态，否则使用默认状态 0
+        const tagsWithStatus = defaultTags.map(t => {
+          const existingTag = prev.tags.find((tag: any) => tag.name === t);
+          return existingTag || { name: t, status: 0 };
+        });
+        
+        // 为每个默认指标创建指标对象，如果已存在则使用现有值，否则使用默认值 3
+        const metricsWithValue = defaultMetrics.map(m => {
+          const existingMetric = prev.metrics.find((metric: any) => metric.name === m);
+          return existingMetric || { name: m, value: 3 };
+        });
+        
+        // 为每个选择框创建选择对象，如果已存在则使用现有值，否则使用空值
+        const selectOptionsWithValue = allSelectOptions.map(opt => {
+          const existing = prev.selectOptions.find(s => s.name === opt.name);
+          return {
+            name: opt.name,
+            value: existing?.value || ''
+          };
+        });
+        
+        return {
+          ...prev,
+          tags: tagsWithStatus,
+          metrics: metricsWithValue,
+          selectOptions: selectOptionsWithValue
+        };
+      });
+    }
   }, [formData.itemId, formData.categoryId, useItem, workItems, categories, editingEvent]);
 
   function parseMins(timeStr: string) {
@@ -288,11 +477,27 @@ const EventForm: React.FC<EventFormProps> = ({ onClose, onSubmit, editingEvent, 
     else setNewPainPoint('');
   };
 
+  const handleSelectOptionChange = (name: string, value: string) => {
+    setFormData(prev => ({
+      ...prev,
+      selectOptions: prev.selectOptions.map(opt => 
+        opt.name === name ? { ...opt, value } : opt
+      )
+    }));
+  };
+
+  const toggleSelectOptionExpanded = (name: string) => {
+    setExpandedSelectOptions(prev => ({
+      ...prev,
+      [name]: !prev[name]
+    }));
+  };
+
   const currentItem = workItems.find(i => i.id === formData.itemId);
   const currentCategory = categories.find(c => c.id === formData.categoryId);
   
   const mergedHighlightPool = useMemo(() => {
-    const base = (useItem && currentItem) ? currentItem.highlightPool : (currentCategory?.highlightPool || []);
+    const base = (useItem && currentItem) ? (currentItem.highlightPool || []) : (currentCategory?.highlightPool || []);
     const combined = [...base];
     sessionNewPoolItems.highlights.forEach(h => {
       if (!combined.some(b => b.name === h)) combined.push({ name: h, count: 0 });
@@ -301,7 +506,7 @@ const EventForm: React.FC<EventFormProps> = ({ onClose, onSubmit, editingEvent, 
   }, [currentItem, currentCategory, useItem, sessionNewPoolItems.highlights]);
 
   const mergedPainPointPool = useMemo(() => {
-    const base = (useItem && currentItem) ? currentItem.painPointPool : (currentCategory?.painPointPool || []);
+    const base = (useItem && currentItem) ? (currentItem.painPointPool || []) : (currentCategory?.painPointPool || []);
     const combined = [...base];
     sessionNewPoolItems.painPoints.forEach(p => {
       if (!combined.some(b => b.name === p)) combined.push({ name: p, count: 0 });
@@ -343,6 +548,7 @@ const EventForm: React.FC<EventFormProps> = ({ onClose, onSubmit, editingEvent, 
             <label className="text-[10px] md:text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1.5"><CalendarIcon className="w-3.5 h-3.5 text-indigo-200"/> 确认日期</label>
             <div className="flex items-center gap-2">
               <button type="button" onClick={() => setFormData({...formData, date: getToday()})} className={`px-4 py-2 rounded-xl text-xs font-bold border-2 transition-all ${formData.date === getToday() ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'bg-gray-50 border-transparent text-gray-400'}`}>今天</button>
+              <button type="button" onClick={() => setFormData({...formData, date: getYesterday()})} className={`px-4 py-2 rounded-xl text-xs font-bold border-2 transition-all ${formData.date === getYesterday() ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'bg-gray-50 border-transparent text-gray-400'}`}>昨日</button>
               <input type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} className="bg-gray-50 border-2 border-transparent focus:border-indigo-100 px-3 py-1.5 rounded-xl text-xs font-black outline-none" />
             </div>
           </section>
@@ -385,13 +591,13 @@ const EventForm: React.FC<EventFormProps> = ({ onClose, onSubmit, editingEvent, 
             </div>
           </section>
 
-          {formData.tags.length > 0 && (
+          {formData.tags && formData.tags.length > 0 && (
             <section className="space-y-3">
               <label className="text-[10px] md:text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1.5"><Tag className="w-3.5 h-3.5 text-indigo-200"/> 状态感知</label>
               <div className="flex flex-wrap gap-2">
                 {formData.tags.map((tag, idx) => (
                   <button key={idx} type="button" onClick={() => {
-                    const statuses: TagStatus['status'][] = ['neutral', 'positive', 'negative'];
+                    const statuses: TagStatus['status'][] = [0, 1, -1];
                     const currentIdx = statuses.indexOf(tag.status);
                     const nextStatus = statuses[(currentIdx + 1) % 3];
                     setFormData(prev => {
@@ -400,13 +606,57 @@ const EventForm: React.FC<EventFormProps> = ({ onClose, onSubmit, editingEvent, 
                       return { ...prev, tags: newTags };
                     });
                   }} className={`px-3 py-1.5 rounded-xl text-[10px] md:text-xs font-black border-2 transition-all flex items-center gap-1.5 ${
-                    tag.status === 'positive' ? 'bg-green-50 border-green-100 text-green-600' : 
-                    tag.status === 'negative' ? 'bg-red-50 border-red-100 text-red-600' : 
+                    tag.status === 1 ? 'bg-green-50 border-green-100 text-green-600' : 
+                    tag.status === -1 ? 'bg-red-50 border-red-100 text-red-600' : 
                     'bg-gray-50 border-gray-50 text-gray-400'
                   }`}>
-                    {tag.status === 'positive' ? '✅' : tag.status === 'negative' ? '❌' : '⚪'} {tag.name}
+                    {tag.status === 1 ? '✅' : tag.status === -1 ? '❌' : '⚪'} {tag.name}
                   </button>
                 ))}
+              </div>
+            </section>
+          )}
+
+          {formData.selectOptions && formData.selectOptions.length > 0 && (
+            <section className="space-y-3">
+              <label className="text-[10px] md:text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1.5"><LayoutGrid className="w-3.5 h-3.5 text-indigo-200"/> 选择选项</label>
+              <div className="space-y-3">
+                {formData.selectOptions.map((selectOpt, idx) => {
+                  // 获取选择框的选项列表
+                  const allSelectOptions = [...(currentItem?.selectOptions || []), ...(currentCategory?.selectOptions || [])];
+                  const selectOptionDef = allSelectOptions.find(opt => opt.name === selectOpt.name);
+                  const options = selectOptionDef?.options || [];
+                  
+                  return (
+                    <div key={idx} className="bg-gray-50/50 p-3 rounded-2xl border border-gray-100">
+                      <button 
+                        type="button" 
+                        onClick={() => toggleSelectOptionExpanded(selectOpt.name)}
+                        className="w-full flex justify-between items-center text-left"
+                      >
+                        <span className="text-xs font-bold text-gray-500">{selectOpt.name}</span>
+                        {expandedSelectOptions[selectOpt.name] ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                      </button>
+                      {expandedSelectOptions[selectOpt.name] && (
+                        <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                          {options.map((option, optIdx) => (
+                            <button 
+                              key={optIdx}
+                              type="button"
+                              onClick={() => handleSelectOptionChange(selectOpt.name, option)}
+                              className={`px-3 py-1.5 rounded-xl text-[10px] md:text-xs font-black border-2 transition-all ${
+                                selectOpt.value === option ? 'bg-indigo-50 border-indigo-100 text-indigo-600' : 
+                                'bg-white border-gray-100 text-gray-400'
+                              }`}
+                            >
+                              {option}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </section>
           )}
@@ -456,7 +706,7 @@ const EventForm: React.FC<EventFormProps> = ({ onClose, onSubmit, editingEvent, 
             </div>
           </section>
 
-          {formData.metrics.length > 0 && (
+          {formData.metrics && formData.metrics.length > 0 && (
             <section className="space-y-4">
               <label className="text-[10px] md:text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-1.5"><BarChart3 className="w-3.5 h-3.5 text-indigo-200"/> 核心指标维度</label>
               <div className="space-y-4">

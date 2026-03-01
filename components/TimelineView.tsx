@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Edit2, Trash2, Clock, Star, AlertCircle, Quote, Tag, BarChart3, Plus, X, EyeOff, LayoutList, Sparkles } from 'lucide-react';
+import { Edit2, Trash2, Clock, Star, AlertCircle, Quote, Tag, BarChart3, Plus, X, EyeOff, LayoutList, Sparkles, LayoutGrid } from 'lucide-react';
 import { EventEntry, Category } from '../types';
 
 // 格式化时间，将超过24小时的时间转换为"明x-24:xx"格式
@@ -157,17 +157,31 @@ const TimelineView: React.FC<TimelineViewProps> = ({ events, onEdit, onDelete, c
                       </h4>
                       {event.tags && event.tags.length > 0 && (
                         <div className="flex flex-wrap gap-1.5">
-                          {event.tags.map((tag, idx) => (
-                            <span key={idx} className={`text-[8px] md:text-[10px] px-2 py-0.5 rounded-md font-bold flex items-center gap-1 ${
-                              tag.status === 'positive' ? 'bg-green-50 text-green-600 border border-green-100' : 
-                              tag.status === 'negative' ? 'bg-red-50 text-red-600 border border-red-100' : 
-                              'bg-gray-50 text-gray-400 border border-gray-100'
-                            }`}>
-                              {tag.status === 'positive' && <Plus className="w-2 h-2" />}
-                              {tag.status === 'negative' && <X className="w-2 h-2" />}
-                              {tag.name}
-                            </span>
-                          ))}
+                          {event.tags.map((tag, idx) => {
+                            // 转换旧的标签格式（字符串状态值）为新的格式（数字状态值）
+                            let status = tag.status;
+                            if (typeof status === 'string') {
+                              switch (status) {
+                                case 'positive': status = 1;
+                                  break;
+                                case 'negative': status = -1;
+                                  break;
+                                default: status = 0;
+                                  break;
+                              }
+                            }
+                            return (
+                              <span key={idx} className={`text-[8px] md:text-[10px] px-2 py-0.5 rounded-md font-bold flex items-center gap-1 ${
+                                status === 1 ? 'bg-green-50 text-green-600 border border-green-100' : 
+                                status === -1 ? 'bg-red-50 text-red-600 border border-red-100' : 
+                                'bg-gray-50 text-gray-400 border border-gray-100'
+                              }`}>
+                                {status === 1 && <Plus className="w-2 h-2" />}
+                                {status === -1 && <X className="w-2 h-2" />}
+                                {tag.name}
+                              </span>
+                            );
+                          })}
                         </div>
                       )}
                     </div>
@@ -184,7 +198,7 @@ const TimelineView: React.FC<TimelineViewProps> = ({ events, onEdit, onDelete, c
                       </div>
                     )}
 
-                    {(event.highlights?.length > 0 || event.painPoints?.length > 0) && (
+                    {(event.highlights?.length > 0 || event.painPoints?.length > 0 || event.selectOptions?.length > 0) && (
                       <div className="flex flex-wrap gap-1.5 pt-1.5">
                         {event.highlights?.map(h => (
                           <span key={h} className="flex items-center gap-1 text-[9px] md:text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded-lg border border-amber-100/50">
@@ -194,6 +208,11 @@ const TimelineView: React.FC<TimelineViewProps> = ({ events, onEdit, onDelete, c
                         {event.painPoints?.map(p => (
                           <span key={p} className="flex items-center gap-1 text-[9px] md:text-[10px] font-bold text-red-500 bg-red-50 px-2 py-1 rounded-lg border border-red-100/50">
                             <AlertCircle className="w-2.5 h-2.5" /> {p}
+                          </span>
+                        ))}
+                        {event.selectOptions?.map(option => (
+                          <span key={option.name} className="flex items-center gap-1 text-[9px] md:text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg border border-indigo-100/50">
+                            <LayoutGrid className="w-2.5 h-2.5" /> {option.name}: {option.value}
                           </span>
                         ))}
                       </div>

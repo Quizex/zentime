@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { List, Calendar, BarChart3, Settings, Sparkles, LogOut, User, FolderEdit } from 'lucide-react';
+import { List, Calendar, BarChart3, Settings, Sparkles, LogOut, User, FolderEdit, Search } from 'lucide-react';
 import { ViewType } from '../types';
 
 interface SidebarProps {
@@ -15,6 +15,7 @@ export default function Sidebar({ activeView, setActiveView, currentUser, onLogo
     { id: 'timeline', label: '时光轴', icon: List },
     { id: 'calendar', label: '日历', icon: Calendar },
     { id: 'stats', label: '分析', icon: BarChart3 },
+    { id: 'search', label: '查询', icon: Search },
     { id: 'management', label: '库管理', icon: FolderEdit }, // 在移动端也作为主要入口
   ];
 

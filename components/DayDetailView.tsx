@@ -1,6 +1,6 @@
 
 import React, { useMemo } from 'react';
-import { Clock, Star, Quote, PieChart as PieIcon, List as ListIcon, Zap, AlertCircle } from 'lucide-react';
+import { Clock, Star, Quote, PieChart as PieIcon, List as ListIcon, Zap, AlertCircle, LayoutGrid, Plus, X } from 'lucide-react';
 import { EventEntry, Category } from '../types';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 
@@ -146,7 +146,15 @@ const DayDetailView: React.FC<DayDetailViewProps> = ({ date, events, categories,
                       </div>
                       <span className="text-lg">{event.moodRating >= 4 ? '✨' : ''}</span>
                     </div>
-                    {event.description && <p className="text-xs text-gray-400 leading-relaxed line-clamp-2">{event.description}</p>}
+                    <div className="space-y-2.5">
+                      {event.description && <p className="text-xs text-gray-400 leading-relaxed line-clamp-2">{event.description}</p>}
+                      {event.reflection && (
+                        <div className="flex gap-2.5 items-start bg-indigo-50/20 p-3 rounded-2xl border-l-4 border-indigo-200">
+                          <Quote className="w-3.5 h-3.5 text-indigo-300 shrink-0 mt-1" />
+                          <p className="text-[10px] md:text-[13px] text-indigo-500 italic leading-relaxed font-medium">{event.reflection}</p>
+                        </div>
+                      )}
+                    </div>
                     <div className="flex flex-wrap gap-2">
                        {event.highlights.map(h => (
                          <span key={h} className="flex items-center gap-1 text-[9px] font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded-lg">
@@ -158,7 +166,55 @@ const DayDetailView: React.FC<DayDetailViewProps> = ({ date, events, categories,
                            <AlertCircle className="w-2.5 h-2.5" /> {p}
                          </span>
                        ))}
+                       {event.tags && event.tags.length > 0 && (
+                         event.tags.map(tag => {
+                           // 转换旧的标签格式（字符串状态值）为新的格式（数字状态值）
+                           let status = tag.status;
+                           if (typeof status === 'string') {
+                             switch (status) {
+                               case 'positive': status = 1;
+                                 break;
+                               case 'negative': status = -1;
+                                 break;
+                               default: status = 0;
+                                 break;
+                             }
+                           }
+                           return (
+                             <span key={tag.name} className={`flex items-center gap-1 text-[9px] font-bold px-2 py-1 rounded-lg ${
+                               status === 1 ? 'text-green-600 bg-green-50' : 
+                               status === -1 ? 'text-red-500 bg-red-50' : 
+                               'text-gray-400 bg-gray-50'
+                             }`}>
+                               {status === 1 && <Plus className="w-2 h-2" />}
+                               {status === -1 && <X className="w-2 h-2" />}
+                               {tag.name}
+                             </span>
+                           );
+                         })
+                       )}
+                       {event.selectOptions && event.selectOptions.length > 0 && (
+                         event.selectOptions.map(option => (
+                           <span key={option.name} className="flex items-center gap-1 text-[9px] font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg">
+                             <LayoutGrid className="w-2 h-2" /> {option.name}: {option.value}
+                           </span>
+                         ))
+                       )}
                     </div>
+                    {event.metrics && event.metrics.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 pt-2 border-t border-gray-50">
+                        {event.metrics.map(m => (
+                          <div key={m.name} className="flex items-center gap-1.5">
+                            <span className="text-[9px] md:text-[10px] text-gray-400 font-bold uppercase tracking-tight shrink-0">{m.name}</span>
+                            <div className="flex gap-0.5">
+                              {[1, 2, 3, 4, 5].map(v => (
+                                <div key={v} className={`w-1.5 h-1.5 rounded-full transition-all ${v <= m.value ? 'bg-indigo-300' : 'bg-gray-100'}`}></div>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                  </div>
               </div>
             );

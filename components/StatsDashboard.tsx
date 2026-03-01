@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState } from 'react';
-import { ResponsiveContainer, Tooltip, LineChart, Line, PieChart, Pie, Cell } from 'recharts';
+import { ResponsiveContainer, Tooltip, LineChart, Line, PieChart, Pie, Cell, YAxis, ReferenceLine } from 'recharts';
 import { EventEntry, Category, FrequentStat, WorkItem } from '../types';
 import { Plus, Trash2, TrendingUp, Target, Award, Info } from 'lucide-react';
 import FrequentStatForm from './FrequentStatForm';
@@ -17,6 +17,7 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ events, categories, fre
   const [isAddingStat, setIsAddingStat] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [deletingStatId, setDeletingStatId] = useState<string | null>(null);
+  const [hoveredDate, setHoveredDate] = useState<string | null>(null);
 
   const handleDeleteClick = (id: string, e: React.MouseEvent) => {
     e.preventDefault();
@@ -50,6 +51,16 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ events, categories, fre
 
   const statInsights = useMemo(() => {
     return frequentStats.map(stat => {
+      // 计算目标值的数值形式
+      let targetValNum = typeof stat.targetValue === 'string' && stat.targetValue.includes(':') 
+        ? parseInt(stat.targetValue.replace(':', '')) 
+        : Number(stat.targetValue);
+
+      // 处理目标时间可能在第二天的情况
+      if (typeof stat.targetValue === 'string' && stat.targetValue.includes(':') && targetValNum < 1200) {
+        targetValNum += 2400;
+      }
+
       const dailyData = last7Days.map(date => {
         const dayEvents = events.filter(e => 
           e.date === date && 
@@ -59,10 +70,12 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ events, categories, fre
 
         let value = 0;
         let isMet = false;
+        let hasData = false;
 
         // 获取该字段的原始数值
         if (stat.dimension === 'time') {
           if (dayEvents.length > 0) {
+            hasData = true;
             if (stat.field === 'startTime') {
               // 时间已经是24小时格式，直接比较
               const sorted = dayEvents.sort((a,b) => {
@@ -89,49 +102,77 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ events, categories, fre
             value = stat.field === 'duration' ? 0 : 2359;
           }
         } else if (stat.dimension === 'state') {
-          const field = stat.field as 'moodRating' | 'completionRating';
-          const total = dayEvents.reduce((acc, curr) => acc + curr[field], 0);
-          value = dayEvents.length > 0 ? total / dayEvents.length : 0;
+          if (dayEvents.length > 0) {
+            hasData = true;
+            const field = stat.field as 'moodRating' | 'completionRating';
+            const total = dayEvents.reduce((acc, curr) => acc + curr[field], 0);
+            value = total / dayEvents.length;
+          } else {
+            value = 0;
+          }
         } else if (stat.dimension === 'metric') {
           const metricVals = dayEvents.flatMap(e => e.metrics.filter(m => m.name === stat.field).map(m => m.value));
-          value = metricVals.length > 0 ? metricVals.reduce((a,b) => a + b, 0) / metricVals.length : 0;
+          if (metricVals.length > 0) {
+            hasData = true;
+            value = metricVals.reduce((a,b) => a + b, 0) / metricVals.length;
+          } else {
+            value = 0;
+          }
         }
 
         // 判定是否达标
-        let targetValNum = typeof stat.targetValue === 'string' && stat.targetValue.includes(':') 
-          ? parseInt(stat.targetValue.replace(':', '')) 
-          : Number(stat.targetValue);
-
-        // 处理目标时间可能在第二天的情况
-        // 如果目标时间小于 12:00，可能是第二天的时间，加上 2400
-        if (typeof stat.targetValue === 'string' && stat.targetValue.includes(':') && targetValNum < 1200) {
-          targetValNum += 2400;
-        }
-
         if (stat.operator === 'gte') isMet = value >= targetValNum;
         else if (stat.operator === 'lte') isMet = value <= targetValNum;
         else if (stat.operator === 'eq') isMet = value === targetValNum;
 
-        return { date, value, isMet };
-      });
+        return { date, value, isMet, hasData };
+      }); // 不再过滤无数据的天数，保留位置
+
+      // 只计算有数据的点，用于确定图表范围
+      const dataPoints = dailyData.filter(d => d.hasData);
+      const allValues = [...dataPoints.map(d => d.value), targetValNum];
+      
+      // 根据数据类型调整 Y 轴范围
+      let minValue = 0;
+      let maxValue = 100;
+      
+      if (allValues.length > 0) {
+        const min = Math.min(...allValues);
+        const max = Math.max(...allValues);
+        
+        if (stat.dimension === 'state' || stat.dimension === 'metric') {
+          // 对于状态和指标类型，值通常在 1-5 之间
+          minValue = Math.max(0, min - 1);
+          maxValue = Math.min(5, max + 1);
+        } else {
+          // 对于其他类型（如时间），使用更大的范围
+          minValue = min - 10;
+          maxValue = max + 10;
+        }
+      }
 
       const todayData = dailyData[dailyData.length - 1];
-      const metCount = dailyData.filter(d => d.isMet).length;
+      const metCount = dataPoints.filter(d => d.isMet).length;
+      const totalDays = dataPoints.length;
       
       // 排名逻辑：如果目标是“小于等于”（如早起时间），则数值越小排名越高；
       // 如果目标是“大于等于”（如专注度、时长），则数值越大排名越高。
-      const sortedForRank = [...dailyData].sort((a, b) => {
+      const sortedForRank = [...dataPoints].sort((a, b) => {
         if (stat.operator === 'lte') return a.value - b.value;
         return b.value - a.value;
       });
-      const rank = sortedForRank.findIndex(d => d.date === todayData.date) + 1;
+      const rank = todayData && todayData.hasData ? sortedForRank.findIndex(d => d.date === todayData.date) + 1 : 0;
 
       return {
         ...stat,
         dailyData,
-        achievementRate: Math.round((metCount / 7) * 100),
+        targetValueNum: targetValNum,
+        minValue,
+        maxValue,
+        achievementRate: totalDays > 0 ? Math.round((metCount / totalDays) * 100) : 0,
         todayRank: rank,
-        isTodayMet: todayData.isMet
+        isTodayMet: todayData ? todayData.isMet : false,
+        todayData: todayData
       };
     });
   }, [events, frequentStats, last7Days]);
@@ -176,25 +217,127 @@ const StatsDashboard: React.FC<StatsDashboardProps> = ({ events, categories, fre
                     <div className="text-2xl font-black text-indigo-400">{insight.achievementRate}%</div>
                   </div>
                   <div className="text-center">
-                    <span className="text-[9px] font-black text-gray-300 block mb-1 uppercase tracking-tighter">当日效果排名</span>
-                    <div className="text-2xl font-black text-amber-400">{insight.todayRank}<span className="text-xs text-gray-300 ml-0.5">/7</span></div>
+                    <span className="text-[9px] font-black text-gray-300 block mb-1 uppercase tracking-tighter">该日效果排名</span>
+                    {(() => {
+                      const targetDate = hoveredDate || insight.todayData?.date;
+                      if (!targetDate) {
+                        return <div className="text-2xl font-black text-amber-400">--</div>;
+                      }
+                      const targetData = insight.dailyData.find(d => d.date === targetDate);
+                      if (!targetData || !targetData.hasData) {
+                        return <div className="text-2xl font-black text-amber-400">--</div>;
+                      }
+                      const sortedForRank = [...insight.dailyData.filter(d => d.hasData)].sort((a, b) => {
+                        if (insight.operator === 'lte') return a.value - b.value;
+                        return b.value - a.value;
+                      });
+                      const rank = sortedForRank.findIndex(d => d.date === targetDate) + 1;
+                      return (
+                        <div className="text-2xl font-black text-amber-400">
+                          {rank}<span className="text-xs text-gray-300 ml-0.5">/{sortedForRank.length}</span>
+                        </div>
+                      );
+                    })()}
                   </div>
                   <div className="text-center">
-                    <span className="text-[9px] font-black text-gray-300 block mb-1 uppercase tracking-tighter">当日目标状态</span>
-                    <div className={`text-[10px] font-black mt-2 inline-block px-3 py-1 rounded-full ${insight.isTodayMet ? 'bg-green-50 text-green-500' : 'bg-red-50 text-red-400'}`}>
-                      {insight.isTodayMet ? '已达标' : '未达成'}
-                    </div>
+                    <span className="text-[9px] font-black text-gray-300 block mb-1 uppercase tracking-tighter">该日目标状态</span>
+                    {(() => {
+                      const targetDate = hoveredDate || insight.todayData?.date;
+                      if (!targetDate) {
+                        return <div className="text-[10px] font-black mt-2 inline-block px-3 py-1 rounded-full bg-gray-50 text-gray-400">--</div>;
+                      }
+                      const targetData = insight.dailyData.find(d => d.date === targetDate);
+                      if (!targetData || !targetData.hasData) {
+                        return <div className="text-[10px] font-black mt-2 inline-block px-3 py-1 rounded-full bg-gray-50 text-gray-400">--</div>;
+                      }
+                      return (
+                        <div className={`text-[10px] font-black mt-2 inline-block px-3 py-1 rounded-full ${targetData.isMet ? 'bg-green-50 text-green-500' : 'bg-red-50 text-red-400'}`}>
+                          {targetData.isMet ? '已达标' : '未达成'}
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
 
                 <div className="h-24 w-full">
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={insight.dailyData}>
-                      <Line type="monotone" dataKey="value" stroke={insight.isTodayMet ? "#b5ead7" : "#cbd5e1"} strokeWidth={3} dot={{ fill: insight.isTodayMet ? "#b5ead7" : "#cbd5e1", r: 4 }} />
+                    <LineChart data={insight.dailyData}> {/* 使用所有日期，包括无数据的 */}
+                      <Line 
+                        type="monotone" 
+                        dataKey={(data) => data.hasData ? data.value : null} 
+                        stroke={insight.isTodayMet ? "#b5ead7" : "#cbd5e1"} 
+                        strokeWidth={3} 
+                        dot={(props) => {
+                          const { cx, cy, payload } = props;
+                          if (payload.hasData) {
+                            return (
+                              <circle 
+                                cx={cx} 
+                                cy={cy} 
+                                r={4} 
+                                fill={insight.isTodayMet ? "#b5ead7" : "#cbd5e1"} 
+                                stroke={insight.isTodayMet ? "#b5ead7" : "#cbd5e1"} 
+                                strokeWidth={3}
+                                onMouseEnter={() => setHoveredDate(payload.date)}
+                                onMouseLeave={() => setHoveredDate(null)}
+                              />
+                            );
+                          }
+                          return null; // 无数据时不显示点
+                        }} 
+                        connectNulls={false} // 无数据时不连接线条
+                      />
+                      {/* 为无数据的日期在达标线位置显示空心圆 */}
+                      <Line 
+                        type="monotone" 
+                        dataKey={(data) => data.hasData ? null : insight.targetValueNum} 
+                        stroke="none" // 不显示线条
+                        dot={(props) => {
+                          const { cx, cy, payload } = props;
+                          if (!payload.hasData) {
+                            return (
+                              <circle 
+                                cx={cx} 
+                                cy={cy} 
+                                r={4} 
+                                fill="none" 
+                                stroke="#ff7e67" 
+                                strokeWidth={2}
+                                onMouseEnter={() => setHoveredDate(payload.date)}
+                                onMouseLeave={() => setHoveredDate(null)}
+                              />
+                            );
+                          }
+                          return null; // 有数据时不显示空心圆
+                        }} 
+                        connectNulls={false}
+                      />
                       <Tooltip 
                         contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontSize: '10px' }}
-                        labelFormatter={(v, payload) => payload[0]?.payload?.date || ''}
+                        labelFormatter={(v, payload) => {
+                          const data = payload[0]?.payload;
+                          return data ? `${data.date}` : '';
+                        }}
+                        formatter={(value, name, props) => {
+                          const data = props.payload;
+                          if (!data) return [];
+                          
+                          let displayValue = value;
+                          if (insight.dimension === 'time' && typeof value === 'number') {
+                            // 格式化时间显示
+                            const hours = Math.floor(value / 100);
+                            const minutes = value % 100;
+                            displayValue = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+                          }
+                          
+                          return [
+                            `值: ${displayValue}`,
+                            `状态: ${data.isMet ? '已达标' : '未达成'}`
+                          ];
+                        }}
                       />
+                      <YAxis domain={[insight.minValue, insight.maxValue]} />
+                      <ReferenceLine y={insight.targetValueNum} stroke="#ff7e67" strokeWidth={2} strokeDasharray="3 3" />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>

@@ -9,6 +9,7 @@ type DbCategoryRow = {
   color: string;
   default_tags: unknown;
   default_metrics: unknown;
+  select_options: unknown;
   highlight_pool: unknown;
   pain_point_pool: unknown;
 };
@@ -20,6 +21,7 @@ type DbWorkItemRow = {
   category_id: string;
   default_tags: unknown;
   default_metrics: unknown;
+  select_options: unknown;
   highlight_pool: unknown;
   pain_point_pool: unknown;
   description: string | null;
@@ -49,6 +51,7 @@ type DbEventRow = {
   pain_points: unknown;
   tags: unknown;
   metrics: unknown;
+  select_options: unknown;
   mood_rating: number;
   completion_rating: number;
   date: string;
@@ -81,6 +84,7 @@ const mapCategoryFromDb = (row: DbCategoryRow): Category => ({
   color: row.color,
   defaultTags: asArray<string>(row.default_tags, []),
   defaultMetrics: asArray<string>(row.default_metrics, []),
+  selectOptions: asArray<any>(row.select_options, []),
   highlightPool: asArray<any>(row.highlight_pool, []),
   painPointPool: asArray<any>(row.pain_point_pool, [])
 });
@@ -91,6 +95,7 @@ const mapWorkItemFromDb = (row: DbWorkItemRow): WorkItem => ({
   categoryId: row.category_id,
   defaultTags: asArray<string>(row.default_tags, []),
   defaultMetrics: asArray<string>(row.default_metrics, []),
+  selectOptions: asArray<any>(row.select_options, []),
   highlightPool: asArray<any>(row.highlight_pool, []),
   painPointPool: asArray<any>(row.pain_point_pool, []),
   description: row.description ?? undefined
@@ -118,6 +123,7 @@ const mapEventFromDb = (row: DbEventRow): EventEntry => ({
   painPoints: asArray<string>(row.pain_points, []),
   tags: asArray<any>(row.tags, []),
   metrics: asArray<any>(row.metrics, []),
+  selectOptions: asArray<any>((row as any).select_options, []),
   moodRating: row.mood_rating ?? 0,
   completionRating: row.completion_rating ?? 0,
   date: row.date,
@@ -131,8 +137,8 @@ const mapEventFromDb = (row: DbEventRow): EventEntry => ({
 export async function loadUserData(userId: string): Promise<UserData> {
   const supabase = requireSupabase();
   const [catsRes, itemsRes, statsRes, eventsRes] = await Promise.all([
-    supabase.from('zentime_categories').select('*').eq('user_id', userId),
-    supabase.from('zentime_work_items').select('*').eq('user_id', userId),
+    supabase.from('zentime_categories').select('*').eq('user_id', userId).order('updated_at', { ascending: true }),
+    supabase.from('zentime_work_items').select('*').eq('user_id', userId).order('updated_at', { ascending: true }),
     supabase.from('zentime_frequent_stats').select('*').eq('user_id', userId),
     supabase.from('zentime_events').select('*').eq('user_id', userId).order('created_at_ms', { ascending: false })
   ]);

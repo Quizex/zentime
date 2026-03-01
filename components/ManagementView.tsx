@@ -20,11 +20,13 @@ const ManagementView: React.FC<ManagementViewProps> = ({ categories, setCategori
   
   const [tempTags, setTempTags] = useState('');
   const [tempMetrics, setTempMetrics] = useState('');
+  const [tempSelectOptions, setTempSelectOptions] = useState('');
 
   useEffect(() => {
     if (isEditing && editData) {
       setTempTags(editData.defaultTags?.join('，') || '');
       setTempMetrics(editData.defaultMetrics?.join('，') || '');
+      setTempSelectOptions(editData.selectOptions?.map(opt => `${opt.name}: ${opt.options.join('，')}`).join('\n') || '');
     }
   }, [isEditing, editData?.id]);
 
@@ -59,13 +61,29 @@ const ManagementView: React.FC<ManagementViewProps> = ({ categories, setCategori
     return str.split(/[，,]/).map(s => s.trim()).filter(Boolean);
   };
 
+  const parseSelectOptions = (str: string) => {
+    return str.split('\n')
+      .map(line => line.trim())
+      .filter(Boolean)
+      .map(line => {
+        const [name, optionsStr] = line.split(':', 2);
+        if (!name || !optionsStr) return null;
+        return {
+          name: name.trim(),
+          options: parseCommaString(optionsStr)
+        };
+      })
+      .filter((opt): opt is { name: string; options: string[] } => opt !== null);
+  };
+
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     
     const finalData = {
       ...editData,
       defaultTags: parseCommaString(tempTags),
-      defaultMetrics: parseCommaString(tempMetrics)
+      defaultMetrics: parseCommaString(tempMetrics),
+      selectOptions: parseSelectOptions(tempSelectOptions)
     };
 
     if (tab === 'cat') {
@@ -88,8 +106,8 @@ const ManagementView: React.FC<ManagementViewProps> = ({ categories, setCategori
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
         <button onClick={() => {
             const emptyData = tab === 'cat' 
-              ? { name: '', color: '#8fb8ed', defaultTags: [], defaultMetrics: [], highlightPool: [], painPointPool: [] } 
-              : { name: '', categoryId: categories[0]?.id, defaultTags: [], defaultMetrics: [], description: '', highlightPool: [], painPointPool: [] };
+              ? { name: '', color: '#8fb8ed', defaultTags: [], defaultMetrics: [], selectOptions: [], highlightPool: [], painPointPool: [] } 
+              : { name: '', categoryId: categories[0]?.id, defaultTags: [], defaultMetrics: [], selectOptions: [], description: '', highlightPool: [], painPointPool: [] };
             setEditData(emptyData);
             setIsEditing(true);
           }} className="h-44 border-2 border-dashed border-gray-200 rounded-[32px] flex flex-col items-center justify-center text-gray-300 hover:border-indigo-200 hover:text-indigo-400 transition-all bg-white/40 group">
@@ -111,9 +129,15 @@ const ManagementView: React.FC<ManagementViewProps> = ({ categories, setCategori
               </div>
               <h4 className="font-bold text-gray-700 text-lg mb-1">{c.name}</h4>
               <p className="text-[10px] text-gray-300 font-medium mb-3">包含 {workItems.filter(i => i.categoryId === c.id).length} 个事项</p>
-              <div className="flex flex-wrap gap-1">
-                {c.defaultTags?.slice(0,3).map(t => <span key={t} className="text-[9px] bg-gray-50 text-gray-400 px-1.5 py-0.5 rounded">#{t}</span>)}
-                {c.defaultTags?.length > 3 && <span className="text-[9px] text-gray-300">...</span>}
+              <div className="space-y-2">
+                <div className="flex flex-wrap gap-1">
+                  {c.defaultTags?.slice(0,3).map(t => <span key={t} className="text-[9px] bg-gray-50 text-gray-400 px-1.5 py-0.5 rounded">#{t}</span>)}
+                  {c.defaultTags?.length > 3 && <span className="text-[9px] text-gray-300">...</span>}
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {c.selectOptions?.slice(0,3).map(opt => <span key={opt.name} className="text-[9px] bg-indigo-50 text-indigo-400 px-1.5 py-0.5 rounded">{opt.name}</span>)}
+                  {c.selectOptions?.length > 3 && <span className="text-[9px] text-gray-300">...</span>}
+                </div>
               </div>
             </div>
           ))
@@ -136,6 +160,9 @@ const ManagementView: React.FC<ManagementViewProps> = ({ categories, setCategori
                   </div>
                   <div className="flex flex-wrap gap-1">
                     {i.defaultMetrics?.map(m => <span key={m} className="text-[9px] bg-indigo-50/50 text-indigo-400 px-2 py-0.5 rounded-full font-bold">📊{m}</span>)}
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {i.selectOptions?.map(opt => <span key={opt.name} className="text-[9px] bg-indigo-50 text-indigo-400 px-2 py-0.5 rounded-full font-bold">{opt.name}</span>)}
                   </div>
                 </div>
               </div>
@@ -196,6 +223,17 @@ const ManagementView: React.FC<ManagementViewProps> = ({ categories, setCategori
                   className="w-full p-4 bg-gray-50 rounded-2xl outline-none text-sm min-h-[80px]" 
                   placeholder="如：专注度，压力感，满足感..."
                 />
+              </div>
+
+              <div className="space-y-3">
+                <label className="text-xs text-gray-400 font-black uppercase tracking-widest flex items-center gap-2"><LayoutGrid className="w-4 h-4"/> 选择框配置</label>
+                <textarea 
+                  value={tempSelectOptions} 
+                  onChange={e => setTempSelectOptions(e.target.value)} 
+                  className="w-full p-4 bg-gray-50 rounded-2xl outline-none text-sm min-h-[120px]" 
+                  placeholder="每行一个选择框，格式：选择框名称: 选项1，选项2，选项3\n如：\n乘车方式: 公交，地铁，出租车\n餐时: 早饭，午饭，晚饭"
+                />
+                <p className="text-[10px] text-gray-300 italic">示例：乘车方式: 公交，地铁，出租车</p>
               </div>
 
               <div className="flex gap-4 pt-6">

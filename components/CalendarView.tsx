@@ -52,17 +52,12 @@ const CalendarView: React.FC<CalendarViewProps> = ({ events, onDateSelect, categ
 
         {/* 重点事件简要列表 */}
         <div className="flex-1 overflow-hidden space-y-0.5">
-          {priorityDayEvents.slice(0, 2).map(e => (
+          {priorityDayEvents.map(e => (
             <div key={e.id} className="flex items-center gap-1 text-[8px] md:text-[9px] truncate">
               <div className="w-1 h-1 bg-amber-400 rounded-full shrink-0"></div>
               <span className="text-gray-600 font-bold truncate">{e.title}</span>
             </div>
           ))}
-          {priorityDayEvents.length > 2 && (
-            <div className="text-[7px] md:text-[8px] text-gray-300 font-bold pl-2 italic">
-              ...
-            </div>
-          )}
         </div>
 
         {/* 记录总量显示 */}

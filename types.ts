@@ -1,7 +1,7 @@
 
 export interface TagStatus {
   name: string;
-  status: 'positive' | 'negative' | 'neutral';
+  status: number; // 1: positive, -1: negative, 0: neutral
 }
 
 export interface MetricValue {
@@ -14,6 +14,11 @@ export interface PoolItem {
   count: number;
 }
 
+export interface SelectOption {
+  name: string;
+  options: string[];
+}
+
 export interface WorkItem {
   id: string;
   name: string;
@@ -22,6 +27,7 @@ export interface WorkItem {
   defaultMetrics: string[];
   highlightPool: PoolItem[];
   painPointPool: PoolItem[];
+  selectOptions: SelectOption[];
   description?: string;
 }
 
@@ -33,6 +39,7 @@ export interface Category {
   defaultMetrics: string[];
   highlightPool: PoolItem[];
   painPointPool: PoolItem[];
+  selectOptions: SelectOption[];
 }
 
 export interface EventEntry {
@@ -46,6 +53,7 @@ export interface EventEntry {
   painPoints: string[];
   tags: TagStatus[];
   metrics: MetricValue[];
+  selectOptions: { name: string; value: string }[];
   moodRating: number; 
   completionRating: number;
   date: string;
@@ -70,4 +78,4 @@ export interface FrequentStat {
   targetValue: string | number;
 }
 
-export type ViewType = 'timeline' | 'calendar' | 'stats' | 'management' | 'day-detail';
+export type ViewType = 'timeline' | 'calendar' | 'stats' | 'management' | 'day-detail' | 'search';

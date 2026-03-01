@@ -25,6 +25,7 @@ import DayDetailView from './components/DayDetailView';
 import ManagementView from './components/ManagementView';
 import NaturalLanguageInput from './components/NaturalLanguageInput';
 import LoginView from './components/LoginView';
+import SearchView from './components/SearchView';
 import { loadSpaceState } from './services/spaceStateStore';
 import { getUserDataCounts, loadUserData, migrateStateToUserTables, replaceUserData, type UserDataCounts } from './services/userDataStore';
 import { requireSupabase } from './services/supabaseClient';
@@ -287,6 +288,8 @@ const App: React.FC = () => {
     const newEvent: EventEntry = {
       id: editingEvent?.id || crypto.randomUUID(),
       ...data,
+      tags: data.tags.filter((tag: any) => tag.status !== 0),
+      selectOptions: data.selectOptions || [],
       createdAt: editingEvent?.createdAt || Date.now()
     };
 
@@ -397,6 +400,9 @@ const App: React.FC = () => {
           )}
           {activeView === 'management' && (
             <ManagementView categories={categories} setCategories={setCategories} workItems={workItems} setWorkItems={setWorkItems} />
+          )}
+          {activeView === 'search' && (
+            <SearchView events={events} categories={categories} workItems={workItems} />
           )}
         </div>
       </main>
